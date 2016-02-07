@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+	<head>
+    	<meta charset="utf-8">
+        <title>Three ways of drawing objects</title>
+        <style>
+			<!-- define background and canvas colors -->
+			body { background-color: grey; }
+			canvas { background-color: white; }
+        </style>
+
+		<!-- attach vertex shader to html5 application -->
+		<script id="shader-vs" type="x-shader/x-vertex">
+			uniform vec2 uResolution;
+			uniform float uRadius;
+			attribute float aAngle;
+			varying lowp float vAngle;
+
+			// calculate the vertex position based on given angle
+			vec4 transform(float a)
+			{
+				vec2 position = vec2(200.0, 150.0);
+				
+				if (a > -1.0)
+				{
+					position.x = position.x + (cos(a) * uRadius);
+					position.y = position.y - (sin(a) * uRadius);
+				}
+				
+				vec2 clipspace = position / uResolution * 2.0 - 1.0;
+				return vec4(clipspace * vec2(1, -1), 0, 1);
+			}
+
+			void main(void) 
+			{
+				vAngle = aAngle;
+				gl_Position = transform(aAngle);
+				gl_PointSize = 2.0;
+			}
+        </script>
+
+		<!-- attach fragment shader to html5 application -->
+		<script id="shader-fs" type="x-shader/x-fragment">
+			precision lowp float;
+			varying lowp float vAngle;
+
+			// determine the fragment color based on given angle
+			vec4 color(float a)
+			{
+				vec2 vecColor = vec2(0.5, 0.5);
+				if (a > -1.0)
+				{
+					vecColor.r = smoothstep(-1.0, 1.5, vecColor.r + cos(a));
+					vecColor.g = smoothstep(-1.0, 1.5, vecColor.g + cos(a));
+				}
+				
+				return vec4(vecColor, 0.0, 1.0);
+			}
+
+			void main(void) {
+				gl_FragColor = color(vAngle);
+			}
+        </script>
+
+		<script>
+			// define variables required by WebGL
+			var     gl = null,
+					canvas = null,
+					glProgram = null,
+					fragmentShader = null,
+					vertexShader = null;
+			
+			var     vertexAngleAttribute = null,
+					circleAngleBuffer = null;
+					
+			var		rend_opt = 0;			
+			var		circleRadius = 100;
+
+			// check which rendering option was selected (default is polygon)
+			function getRadioVal()
+			{
+				var form = document.getElementById("options");
+				var radios = form.elements["rend_type"];
+				
+				for (var i=0, len=radios.length; i<len; i++)
+				{
+					if (radios[i].checked)
+					{
+						rend_opt = i;
+						break;
+					}
+				}
+				
+				initWebGL();
+			}
+
+			function initWebGL()
+			{
+				console.log("initWebGL");
+
+				// get WebGL context and connect it to canvas
+				canvas = document.getElementById("my-canvas");
+				
+				try{
+					 gl = canvas.getContext("webgl") ||
+						  canvas.getContext("experimental-webgl");
+				}catch(e){
+				}
+				
+				if(gl)
+				{
+					 setupWebGL();
+					 initShaders();
+					 setupBuffers();
+					 drawScene();
+				}else{
+					alert( "Error: Your browser does not appear to" + "support WebGL.");
+				}
+			}
+			
+			function setupWebGL()
+			{
+				// set canvas clear color to black
+				gl.clearColor(0.0, 0.0, 0.0, 1.0);
+				gl.clear(gl.COLOR_BUFFER_BIT);
+			}
+
+			function initShaders()
+			{
+				//get shader source
+				 var    fs_source = document.getElementById('shader-fs').innerHTML,
+						vs_source = document.getElementById('shader-vs').innerHTML;
+				
+				//compile shaders
+				vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+				gl.attachShader(glProgram, vertexShader);
+				gl.attachShader(glProgram, fragmentShader);
+				gl.linkProgram(glProgram);
+				
+				if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+					 alert("Unable to initialize the shader program.");
+				}
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+				gl.shaderSource(shader, src);
+				gl.compileShader(shader);
+
+				if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+					 alert("Error compiling shader: " +
+						  gl.getShaderInfoLog(shader));
+				}
+
+				return shader;
+			}
+
+			function setupBuffers()
+			{
+				// define the number of segments that form the circle
+				var numFans = 16;
+				var degreePerFan = (2 * Math.PI) / numFans;
+								
+				// define the segment angles
+				var circleAngles = [-1.0];
+				
+				// fill in the angle data
+				for (var i = 0; i <= numFans; i++)
+				{
+					var angle = degreePerFan * i; 
+					circleAngles[i+1] = angle;
+				}
+				
+				// create & bind vertice buffer
+				circleAngleBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, circleAngleBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(circleAngles), gl.STATIC_DRAW);
+
+				// add couple of useful parameters to the buffer
+				circleAngleBuffer.itemSize = Float32Array.BYTES_PER_ELEMENT;
+				circleAngleBuffer.numItems = circleAngles.length;
+
+			}
+
+			function drawScene()
+			{
+				console.log("drawScene");
+				var resolutionLocation = gl.getUniformLocation(glProgram, "uResolution");	
+				gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+
+				var radiusLocation = gl.getUniformLocation(glProgram, "uRadius");	
+				gl.uniform1f(radiusLocation, circleRadius);
+				
+				// pass vertex position to vertex shader
+				vertexAngleAttribute = gl.getAttribLocation(glProgram, "aAngle");
+				gl.enableVertexAttribArray(vertexAngleAttribute);
+				gl.bindBuffer(gl.ARRAY_BUFFER, circleAngleBuffer);
+				gl.vertexAttribPointer(vertexAngleAttribute, 1, gl.FLOAT, false, Float32Array.BYTES_PER_ELEMENT, 0);
+
+				// draw the data based on selected rendering option
+				if (rend_opt == 0)
+				{
+					gl.drawArrays(gl.TRIANGLE_FAN, 0, circleAngleBuffer.numItems);
+					console.log("triangle fan");
+				} 
+				else if (rend_opt == 1)
+				{
+					gl.drawArrays(gl.LINE_LOOP, 1, circleAngleBuffer.numItems - 1);
+					console.log("line loop");
+				}
+				else
+				{
+					gl.drawArrays(gl.POINTS, 1, circleAngleBuffer.numItems - 1);
+					console.log("points");
+				}
+			}
+        </script>
+	</head>
+    <body onload="initWebGL()">
+    <!--body"-->
+		<form id="options">
+        	3D Graphics Programming - Module 2 assignment<br>
+            Select option for rendering type: <br>
+            <input type="radio" name="rend_type" value="0" checked onChange="getRadioVal()"> Polygon<br>
+            <input type="radio" name="rend_type" value="1" onChange="getRadioVal()"> line loop<br>
+            <input type="radio" name="rend_type" value="2" onChange="getRadioVal()"> point sprite
+        </form>
+		<!-- define the canvas WebGL can draw on -->
+    	<canvas id="my-canvas" width="400" height="300"> 
+        	Your browser does not support the HTML5 canvas element. 
+        </canvas>
+	</body>
+</html>
