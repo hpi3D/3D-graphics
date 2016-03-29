@@ -1,0 +1,88 @@
+<?doctype HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./lib/jquery-1.9.1.min.js"></script>
+  <script src="./lib/three.js"></script>
+  <script src="./lib/d3.v3.js"></script>
+  <script src="scene2.js"></script>
+  <!-- vertex shader for custom lighting --->
+  <script id="light-vs" type="x-shader/x-vertex">
+    // light struct
+    struct Light {
+       vec3 pos;
+       vec4 color;
+	   float distance;
+	   float intensity;
+    };
+
+    // global ambient
+    uniform vec4  u_ambient;
+
+    // our directional light 
+    uniform Light dirlight;
+    
+    // our spotlight 
+    uniform Light spotlight;
+    
+    varying vec2 v_uv;    
+    varying vec4 v_color, v_ambient;
+	varying vec3 v_position, v_lightPosition;
+	varying vec3 v_normal, v_halfVector;
+
+    void main() {
+
+		v_color = dirlight.color;
+		v_ambient = u_ambient;
+		//v_color = vec4(1);
+
+        // pass texcoords
+        v_uv    = uv;
+		v_normal = normalize(normalMatrix * normal);
+
+		//v_normal = normal;
+		v_position = position;
+		v_lightPosition = dirlight.pos;
+		
+        // compute vertex position 
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1);
+    
+    }
+
+  </script>
+  <!-- fragment shader for custom lighting --->
+  <script id="light-fs" type="x-shader/x-fragment">
+
+    uniform sampler2D map;
+
+    varying vec2 v_uv;
+    varying vec4 v_color, v_ambient;
+	varying vec3 v_position, v_lightPosition;
+	varying vec3 v_normal, v_halfVector;
+    
+    void main(){
+	   // combine texel color with received color from vertex shader
+       //gl_FragColor = texture2D(map, v_uv) * v_ambient;
+       //vec4 color = texture2D(map, v_uv) * v_ambient;
+
+	   
+	   vec3 lightDir = normalize(v_lightPosition - v_position);
+	   float NdotL = dot(normalize(v_normal), lightDir);
+	   NdotL = clamp (NdotL, 0.0, 1.0);
+/*	   
+	   //if (NdotL > 0.0) 
+	   //{
+		   color += v_color * NdotL  * v_ambient;
+	   //}
+	   */
+	   gl_FragColor = (texture2D(map, v_uv) * v_ambient) + 
+	   		(texture2D(map, v_uv) * v_color * NdotL);
+
+    }
+  </script>
+</head>
+<body>
+<div id="main" style="border: solid 1px;" width="800" height="600"></div>
+<div id="fps" style="position:absolute;width:100px;height:50px;top:10px; left:10px;"></div>
+</body>
+</html>

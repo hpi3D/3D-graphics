@@ -1,0 +1,101 @@
+<?doctype HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./lib/jquery-1.9.1.min.js"></script>
+  <script src="./lib/three.js"></script>
+  <script src="./lib/d3.v3.js"></script>
+  <script src="scene2.js"></script>
+  <!-- vertex shader for custom lighting --->
+  <script id="light-vs" type="x-shader/x-vertex">
+    // light struct
+    struct Light {
+       vec3 pos;
+       vec4 diffuse;
+       vec4 specular;
+    };
+
+    // global ambient
+    uniform vec4  u_ambient;
+
+    // our directional light 
+    uniform Light dirlight;
+    
+    varying vec2 v_uv;    
+    varying vec4 v_diffuse, v_specular, v_ambient;
+	varying vec3 v_lightdir;
+	varying vec3 v_normal, v_halfVector;
+
+    void main() {
+
+		v_diffuse = dirlight.diffuse;
+		v_specular = dirlight.specular;
+		v_ambient = u_ambient;
+
+        // pass texcoords
+        v_uv    = uv;
+		v_normal = normalize(normalMatrix * normal);
+		
+		// change vertex position to eye coordinates
+ 		vec3 ecPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+
+		// change directional light position to eye coordinates
+		vec3 ecLightPosition = (viewMatrix * vec4(dirlight.pos, 1.0)).xyz;
+
+		// calculate half vector base on previous
+		v_halfVector = -ecPosition - ecLightPosition;
+
+		// pass directional light position
+		v_lightdir = dirlight.pos;
+
+        // compute vertex position in eye coordinates
+        gl_Position = projectionMatrix * vec4(ecPosition,1.0);
+    }
+
+  </script>
+  <!-- fragment shader for custom lighting --->
+  <script id="light-fs" type="x-shader/x-fragment">
+
+    uniform sampler2D map;
+
+    varying vec2 v_uv;
+    varying vec4 v_diffuse, v_specular, v_ambient;
+	varying vec3 v_lightdir;
+	varying vec3 v_normal, v_halfVector;
+    
+    void main(){
+	   vec3 normal, lightdir, halfV;
+	   float NdotL, NdotHV;
+
+	   // combine texel color with received ambient color from vertex shader
+       vec4 color = texture2D(map, v_uv) * v_ambient;
+
+	   normal = normalize(v_normal);
+	   
+	   // compute the dot product between normal and light direction
+	   NdotL = max(dot(normal, v_lightdir), 0.0);
+	   
+	   // add the diffuse color of directional light and specularity
+	   // only if we are looking at the lit side of the structures
+	   if (NdotL > 0.0) 
+	   {
+		   // combine texel color with diffuse color from directional light
+		   color += texture2D(map, v_uv) * v_diffuse * NdotL;
+		   halfV = normalize(v_halfVector);
+	   	   // compute the dot product between normal and half vector
+		   NdotHV = max(dot(normal, halfV), 0.0);
+		   // add specular value to color based on viewing angle
+		   color += v_specular * NdotHV;
+	   }
+
+	   // define the final fragment color	   
+	   gl_FragColor = color;
+
+    }
+  </script>
+</head>
+<body>
+<div id="main" style="border: solid 1px;" width="800" height="600"></div>
+<div id="fps" style="position:absolute;width:100px;height:50px;top:10px; left:10px;"></div>
+</body>
+</html>
